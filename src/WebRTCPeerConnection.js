@@ -1,5 +1,5 @@
 import React from "react";
-import adapter from "webrtc-adapter";
+import "webrtc-adapter";
 
 // copied from common.js https://github.com/webrtc/samples/blob/gh-pages/src/js/common.js
 function trace(arg) {
