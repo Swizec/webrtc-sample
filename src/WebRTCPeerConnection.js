@@ -54,8 +54,6 @@ class WebRTCPeerConnection extends React.Component {
             hangUpDisabled: false
         });
         let { localStream } = this.state;
-        const videoTracks = localStream.getVideoTracks(),
-            audioTracks = localStream.getAudioTracks();
 
         let servers = null,
             pc1 = new RTCPeerConnection(servers),
