@@ -6,7 +6,9 @@
     "gh-pages": "^1.1.0",
     "react": "^16.3.2",
     "react-dom": "^16.3.2",
-    "webrtc-adapter": "^6.1.5"
+    "webrtc-adapter": "^6.1.5",
+    "websocket": "^1.0.26",
+    "websocket-node": "^0.1.0"
   },
   "devDependencies": {
     "react-scripts": "1.1.4"

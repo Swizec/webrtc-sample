@@ -55,8 +55,10 @@ class WebRTCPeerConnection extends React.Component {
         });
         let { localStream } = this.state;
 
+        // Ah, servers needs to be some sort of iceServer thing
+        // https://developer.mozilla.org/en-US/docs/Web/API/RTCIceServer
         let servers = null,
-            pc1 = new RTCPeerConnection(servers),
+            pc1 = new RTCPeerConnection(servers), // what is servers??
             pc2 = new RTCPeerConnection(servers);
 
         pc1.onicecandidate = e => this.onIceCandidate(pc1, e);
@@ -81,6 +83,8 @@ class WebRTCPeerConnection extends React.Component {
                     error.toString()
                 )
             );
+
+        console.log("servers after call", servers);
 
         this.setState({
             servers,
@@ -128,19 +132,17 @@ class WebRTCPeerConnection extends React.Component {
     onCreateAnswerSuccess = desc => {
         let { pc1, pc2 } = this.state;
 
-        pc1
-            .setRemoteDescription(desc)
-            .then(
-                () =>
-                    console.log(
-                        "pc1 setRemoteDescription complete createAnswer"
-                    ),
-                error =>
-                    console.error(
-                        "pc1 Failed to set session description in onCreateAnswer",
-                        error.toString()
-                    )
-            );
+        pc1.setRemoteDescription(desc).then(
+            () => {
+                console.log("pc1 setRemoteDescription complete createAnswer");
+                console.log("servers after createAnswer", this.state.servers);
+            },
+            error =>
+                console.error(
+                    "pc1 Failed to set session description in onCreateAnswer",
+                    error.toString()
+                )
+        );
 
         pc2
             .setLocalDescription(desc)
@@ -201,25 +203,30 @@ class WebRTCPeerConnection extends React.Component {
                     ref={this.localVideoRef}
                     autoPlay
                     muted
-                    style={{ width: "240px", height: "180px" }}
-                />
+                    style={{
+                        width: "240px",
+                        height: "180px"
+                    }}
+                />{" "}
                 <video
                     ref={this.remoteVideoRef}
                     autoPlay
-                    style={{ width: "240px", height: "180px" }}
+                    style={{
+                        width: "240px",
+                        height: "180px"
+                    }}
                 />
-
                 <div>
                     <button onClick={this.start} disabled={startDisabled}>
-                        Start
-                    </button>
+                        Start{" "}
+                    </button>{" "}
                     <button onClick={this.call} disabled={callDisabled}>
-                        Call
-                    </button>
+                        Call{" "}
+                    </button>{" "}
                     <button onClick={this.hangUp} disabled={hangUpDisabled}>
-                        Hang Up
-                    </button>
-                </div>
+                        Hang Up{" "}
+                    </button>{" "}
+                </div>{" "}
             </div>
         );
     }
