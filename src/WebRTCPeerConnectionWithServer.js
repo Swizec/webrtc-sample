@@ -130,11 +130,15 @@ class WebRTCPeerConnectionWithServer extends React.Component {
 
     handleVideoOfferMsg = msg => {
         this.createPeerConnection();
+        this.peerConnection.addStream(this.state.localStream);
 
         this.peerConnection
             .setRemoteDescription(new RTCSessionDescription(msg.sdp))
             .then(() => this.peerConnection.createAnswer())
-            .then(answer => this.peerConnection.setLocalDescription(answer))
+            .then(answer => {
+                console.log("setting local answer", answer);
+                return this.peerConnection.setLocalDescription(answer);
+            })
             .then(() => {
                 this.sendToServer({
                     name: this.state.username,
@@ -142,7 +146,8 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                     type: "video-answer",
                     sdp: this.peerConnection.localDescription
                 });
-            });
+            })
+            .catch(console.error);
     };
 
     handleVideoAnswerMsg = msg => {
@@ -208,10 +213,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             targetUsername: user
         });
         this.createPeerConnection();
-        if (this.state.localStream) {
-            console.log("ADDING LOCAL");
-            this.peerConnection.addStream(this.state.localStream);
-        }
+        this.peerConnection.addStream(this.state.localStream);
     };
 
     hangUp = () => {
@@ -224,6 +226,8 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     };
 
     createPeerConnection = () => {
+        if (this.peerConnection) return;
+
         this.peerConnection = new RTCPeerConnection({
             iceServers: [
                 {
@@ -238,7 +242,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         // peerConnection.onicegatheringstatechange = this.handleICEGatheringStateChangeEvent;
         this.peerConnection.onsignalingstatechange = this.handleSignalingStateChangeEvent;
         this.peerConnection.onnegotiationneeded = this.handleNegotiationNeededEvent;
-        this.peerConnection.ontrack = this.gotRemoteTrack;
+        this.peerConnection.onaddtrack = this.gotRemoteTrack;
         this.peerConnection.onaddstream = this.gotRemoteStream;
 
         console.log("peerconnection created", this.peerConnection);
@@ -287,6 +291,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     };
 
     closeVideoCall = () => {
+        console.log("CLOSING VIDEO CALL");
         this.remoteVideoRef.current.srcObject
             .getTracks()
             .forEach(track => track.stop());
@@ -350,7 +355,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                 <div>
                     <ul>
                         {userList.map(user => (
-                            <li>
+                            <li key={user}>
                                 {user}{" "}
                                 {user !== username ? (
                                     <button
