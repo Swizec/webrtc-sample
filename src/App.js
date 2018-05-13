@@ -1,7 +1,6 @@
 import React, { Component } from "react";
 import logo from "./logo.svg";
 import "./App.css";
-import WebRTCPeerConnection from "./WebRTCPeerConnection";
 import WebRTCPeerConnectionWithServer from "./WebRTCPeerConnectionWithServer";
 
 class App extends Component {

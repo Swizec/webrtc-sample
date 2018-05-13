@@ -1,11 +1,6 @@
 import React from "react";
 import "webrtc-adapter";
-
-// copied from common.js https://github.com/webrtc/samples/blob/gh-pages/src/js/common.js
-function trace(arg) {
-    var now = (window.performance.now() / 1000).toFixed(3);
-    console.log(now + ": ", arg);
-}
+import faker from "faker";
 
 class WebRTCPeerConnectionWithServer extends React.Component {
     state = {
@@ -17,12 +12,13 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         localStream: null,
         signalingConnection: null,
         clientID: new Date().getTime() % 1000,
-        username: "",
+        username: faker.internet.userName(),
         userList: []
     };
 
     localVideoRef = React.createRef();
     remoteVideoRef = React.createRef();
+    peerConnection = null;
 
     sendToServer = msg => {
         const msgJSON = JSON.stringify(msg);
@@ -107,17 +103,17 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                     this.handleVideoOfferMsg(msg);
                     break;
 
-                // case "video-answer": // Callee has answered our offer
-                //     handleVideoAnswerMsg(msg);
-                //     break;
+                case "video-answer": // Callee has answered our offer
+                    this.handleVideoAnswerMsg(msg);
+                    break;
 
-                // case "new-ice-candidate": // A new ICE candidate has been received
-                //     handleNewICECandidateMsg(msg);
-                //     break;
+                case "new-ice-candidate": // A new ICE candidate has been received
+                    this.handleNewICECandidateMsg(msg);
+                    break;
 
-                // case "hang-up": // The other peer has hung up the call
-                //     handleHangUpMsg(msg);
-                //     break;
+                case "hang-up": // The other peer has hung up the call
+                    this.handleHangUpMsg(msg);
+                    break;
 
                 // Unknown message; output to console for debugging.
 
@@ -132,9 +128,69 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         });
     };
 
-    handleVideoOfferMsg = msg => {};
+    handleVideoOfferMsg = msg => {
+        this.createPeerConnection();
 
-    start = () => {
+        this.peerConnection
+            .setRemoteDescription(new RTCSessionDescription(msg.sdp))
+            .then(() => this.peerConnection.createAnswer())
+            .then(answer => this.peerConnection.setLocalDescription(answer))
+            .then(() => {
+                this.sendToServer({
+                    name: this.state.username,
+                    targetUsername: this.state.targetUsername,
+                    type: "video-answer",
+                    sdp: this.peerConnection.localDescription
+                });
+            });
+    };
+
+    handleVideoAnswerMsg = msg => {
+        console.log("handleVideoAnswerMsg", msg);
+
+        this.peerConnection
+            .setRemoteDescription(new RTCSessionDescription(msg.sdp))
+            .catch(console.error);
+    };
+
+    handleNewICECandidateMsg = msg => {
+        this.peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+    };
+
+    handleHangUpMsg = msg => {
+        console.log("handleHangUpMsg", msg);
+
+        this.closeVideoCall();
+    };
+
+    gotStream = stream => {
+        this.localVideoRef.current.srcObject = stream;
+        this.setState({
+            callDisabled: false,
+            localStream: stream
+        });
+    };
+    gotRemoteTrack = event => {
+        console.log("got remote track", event);
+        let remoteVideo = this.remoteVideoRef.current;
+
+        if (remoteVideo.srcObject !== event.streams[0]) {
+            remoteVideo.srcObject = event.streams[0];
+        }
+
+        this.setState({
+            hangUpDisabled: false
+        });
+    };
+    gotRemoteStream = event => {
+        console.log("got remote stream", event);
+        this.remoteVideoRef.current.srcObject = event.stream;
+        this.setState({
+            hangUpDisabled: false
+        });
+    };
+
+    initMedia = () => {
         this.setState({
             startDisabled: true
         });
@@ -146,161 +202,100 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             .then(this.gotStream)
             .catch(e => alert("getUserMedia() error:" + e.name));
     };
-    gotStream = stream => {
-        this.localVideoRef.current.srcObject = stream;
-        this.setState({
-            callDisabled: false,
-            localStream: stream
-        });
-    };
-    gotRemoteStream = event => {
-        let remoteVideo = this.remoteVideoRef.current;
 
-        if (remoteVideo.srcObject !== event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
+    call = user => {
+        this.setState({
+            targetUsername: user
+        });
+        this.createPeerConnection();
+        if (this.state.localStream) {
+            console.log("ADDING LOCAL");
+            this.peerConnection.addStream(this.state.localStream);
         }
     };
 
-    call = () => {
-        this.setState({
-            callDisabled: true,
-            hangUpDisabled: false
-        });
-        let { localStream } = this.state;
-
-        // Ah, servers needs to be some sort of iceServer thing
-        // https://developer.mozilla.org/en-US/docs/Web/API/RTCIceServer
-        let servers = null,
-            pc1 = new RTCPeerConnection(servers), // what is servers??
-            pc2 = new RTCPeerConnection(servers);
-
-        pc1.onicecandidate = e => this.onIceCandidate(pc1, e);
-        pc1.oniceconnectionstatechange = e => this.onIceStateChange(pc1, e);
-
-        pc2.onicecandidate = e => this.onIceCandidate(pc2, e);
-        pc2.oniceconnectionstatechange = e => this.onIceStateChange(pc2, e);
-        pc2.ontrack = this.gotRemoteStream;
-
-        localStream
-            .getTracks()
-            .forEach(track => pc1.addTrack(track, localStream));
-
-        pc1
-            .createOffer({
-                offerToReceiveAudio: 1,
-                offerToReceiveVideo: 1
-            })
-            .then(this.onCreateOfferSuccess, error =>
-                console.error(
-                    "Failed to create session description",
-                    error.toString()
-                )
-            );
-
-        console.log("servers after call", servers);
-
-        this.setState({
-            pc1,
-            pc2,
-            localStream
-        });
-    };
-
-    onCreateOfferSuccess = desc => {
-        let { pc1, pc2 } = this.state;
-
-        pc1
-            .setLocalDescription(desc)
-            .then(
-                () =>
-                    console.log("pc1 setLocalDescription complete createOffer"),
-                error =>
-                    console.error(
-                        "pc1 Failed to set session description in createOffer",
-                        error.toString()
-                    )
-            );
-
-        pc2.setRemoteDescription(desc).then(
-            () => {
-                console.log("pc2 setRemoteDescription complete createOffer");
-                pc2
-                    .createAnswer()
-                    .then(this.onCreateAnswerSuccess, error =>
-                        console.error(
-                            "pc2 Failed to set session description in createAnswer",
-                            error.toString()
-                        )
-                    );
-            },
-            error =>
-                console.error(
-                    "pc2 Failed to set session description in createOffer",
-                    error.toString()
-                )
-        );
-    };
-
-    onCreateAnswerSuccess = desc => {
-        let { pc1, pc2 } = this.state;
-
-        pc1.setRemoteDescription(desc).then(
-            () => {
-                console.log("pc1 setRemoteDescription complete createAnswer");
-            },
-            error =>
-                console.error(
-                    "pc1 Failed to set session description in onCreateAnswer",
-                    error.toString()
-                )
-        );
-
-        pc2
-            .setLocalDescription(desc)
-            .then(
-                () =>
-                    console.log(
-                        "pc2 setLocalDescription complete createAnswer"
-                    ),
-                error =>
-                    console.error(
-                        "pc2 Failed to set session description in onCreateAnswer",
-                        error.toString()
-                    )
-            );
-    };
-
-    onIceCandidate = (pc, event) => {
-        let { pc1, pc2 } = this.state;
-
-        let otherPc = pc === pc1 ? pc2 : pc1;
-
-        otherPc
-            .addIceCandidate(event.candidate)
-            .then(
-                () => console.log("addIceCandidate success"),
-                error =>
-                    console.error(
-                        "failed to add ICE Candidate",
-                        error.toString()
-                    )
-            );
-    };
-
-    onIceStateChange = (pc, event) => {
-        console.log("ICE state:", pc.iceConnectionState);
-    };
-
     hangUp = () => {
-        let { pc1, pc2 } = this.state;
+        this.sendToServer({
+            name: this.state.username,
+            target: this.state.targetUsername,
+            type: "hang-up"
+        });
+        this.closeVideoCall();
+    };
 
-        pc1.close();
-        pc2.close();
+    createPeerConnection = () => {
+        this.peerConnection = new RTCPeerConnection({
+            iceServers: [
+                {
+                    urls: `turn:${window.location.hostname}`,
+                    username: "webrtc",
+                    credential: "turnserver"
+                }
+            ]
+        });
+        this.peerConnection.onicecandidate = this.handleICECandidateEvent;
+        this.peerConnection.oniceconnectionstatechange = this.handleICEConnectionStateChangeEvent;
+        // peerConnection.onicegatheringstatechange = this.handleICEGatheringStateChangeEvent;
+        this.peerConnection.onsignalingstatechange = this.handleSignalingStateChangeEvent;
+        this.peerConnection.onnegotiationneeded = this.handleNegotiationNeededEvent;
+        this.peerConnection.ontrack = this.gotRemoteTrack;
+        this.peerConnection.onaddstream = this.gotRemoteStream;
+
+        console.log("peerconnection created", this.peerConnection);
+    };
+
+    handleICECandidateEvent = event => {
+        if (event.candidate) {
+            this.sendToServer({
+                type: "new-ice-candidate",
+                target: this.state.targetUsername,
+                candidate: event.candidate
+            });
+        }
+    };
+
+    handleICEConnectionStateChangeEvent = event => {
+        switch (this.peerConnection.iceConnectionState) {
+            case "closed":
+            case "failed":
+            case "disconnected":
+                this.closeVideoCall();
+        }
+    };
+
+    handleSignalingStateChangeEvent = event => {
+        switch (this.peerConnection.signalingState) {
+            case "closed":
+                this.closeVideoCall();
+        }
+    };
+
+    handleNegotiationNeededEvent = () => {
+        const { username, targetUsername } = this;
+        this.peerConnection
+            .createOffer()
+            .then(offer => this.peerConnection.setLocalDescription(offer))
+            .then(() =>
+                this.sendToServer({
+                    name: username,
+                    target: targetUsername,
+                    type: "video-offer",
+                    sdp: this.peerConnection.localDescription
+                })
+            )
+            .catch(console.error);
+    };
+
+    closeVideoCall = () => {
+        this.remoteVideoRef.current.srcObject
+            .getTracks()
+            .forEach(track => track.stop());
+        this.remoteVideoRef.current.src = null;
+        this.peerConnection.close();
+        this.peerConnection = null;
 
         this.setState({
-            pc1: null,
-            pc2: null,
-            hangUpDisabled: true,
+            targetUsername: null,
             callDisabled: false
         });
     };
@@ -337,24 +332,37 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                 <video
                     ref={this.remoteVideoRef}
                     autoPlay
+                    muted
                     style={{
                         width: "240px",
                         height: "180px"
                     }}
                 />
                 <div>
-                    <button onClick={this.start} disabled={startDisabled}>
-                        Start
+                    <button onClick={this.initMedia} disabled={startDisabled}>
+                        Init Media
                     </button>
-                    <button onClick={this.call} disabled={callDisabled}>
-                        Call
-                    </button>
+
                     <button onClick={this.hangUp} disabled={hangUpDisabled}>
                         Hang Up
                     </button>
                 </div>
                 <div>
-                    <ul>{userList.map(user => <li>{user}</li>)}</ul>
+                    <ul>
+                        {userList.map(user => (
+                            <li>
+                                {user}{" "}
+                                {user !== username ? (
+                                    <button
+                                        onClick={() => this.call(user)}
+                                        disabled={callDisabled}
+                                    >
+                                        Call
+                                    </button>
+                                ) : null}
+                            </li>
+                        ))}
+                    </ul>
                 </div>
             </div>
         );
