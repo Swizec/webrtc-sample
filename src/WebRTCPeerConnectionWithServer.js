@@ -28,7 +28,10 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     };
 
     setUsername = () => {
-        const { username, clientID } = this.state;
+        const {
+            username,
+            clientID
+        } = this.state;
         this.sendToServer({
             name: username,
             date: Date.now(),
@@ -43,10 +46,15 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         });
 
     componentDidMount() {
-        this.connectToSocket();
+        this.connectToSocket({
+            socketURL: 'localhost:6503'
+        });
     }
-    connectToSocket = () => {
-        let serverUrl = `wss://localhost:6503`;
+
+    connectToSocket = ({
+        socketURL
+    }) => {
+        let serverUrl = `wss://${socketURL}`;
 
         let signalingConnection = new WebSocket(serverUrl, "json");
         signalingConnection.onopen = () =>
@@ -55,7 +63,6 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             });
 
         signalingConnection.onmessage = event => {
-            let text = "";
             let msg = JSON.parse(event.data);
             console.log("Message received: ");
             console.dir(msg);
@@ -95,9 +102,9 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                     });
                     break;
 
-                // // Signaling messages: these messages are used to trade WebRTC
-                // // signaling information during negotiations leading up to a video
-                // // call.
+                    // // Signaling messages: these messages are used to trade WebRTC
+                    // // signaling information during negotiations leading up to a video
+                    // // call.
 
                 case "video-offer": // Invitation and offer to chat
                     this.handleVideoOfferMsg(msg);
@@ -115,7 +122,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                     this.handleHangUpMsg(msg);
                     break;
 
-                // Unknown message; output to console for debugging.
+                    // Unknown message; output to console for debugging.
 
                 default:
                     console.error("Unknown message received:");
@@ -229,13 +236,11 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         if (this.peerConnection) return;
 
         this.peerConnection = new RTCPeerConnection({
-            iceServers: [
-                {
-                    urls: `turn:${window.location.hostname}`,
-                    username: "webrtc",
-                    credential: "turnserver"
-                }
-            ]
+            iceServers: [{
+                urls: `turn:${window.location.hostname}`,
+                username: "webrtc",
+                credential: "turnserver"
+            }]
         });
         this.peerConnection.onicecandidate = this.handleICECandidateEvent;
         this.peerConnection.oniceconnectionstatechange = this.handleICEConnectionStateChangeEvent;
@@ -275,7 +280,10 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     };
 
     handleNegotiationNeededEvent = () => {
-        const { username, targetUsername } = this;
+        const {
+            username,
+            targetUsername
+        } = this;
         this.peerConnection
             .createOffer()
             .then(offer => this.peerConnection.setLocalDescription(offer))
@@ -314,62 +322,94 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             userList
         } = this.state;
 
-        return (
-            <div>
-                <div>
-                    Username:{" "}
-                    <input
-                        type="text"
-                        value={username}
-                        onChange={this.changeUsername}
-                    />
-                    <button onClick={this.setUsername}>Set Username</button>
-                </div>
-                <video
-                    ref={this.localVideoRef}
-                    autoPlay
-                    muted
-                    style={{
-                        width: "240px",
-                        height: "180px"
-                    }}
-                />
-                <video
-                    ref={this.remoteVideoRef}
-                    autoPlay
-                    muted
-                    style={{
-                        width: "240px",
-                        height: "180px"
-                    }}
-                />
-                <div>
-                    <button onClick={this.initMedia} disabled={startDisabled}>
-                        Init Media
-                    </button>
+        return ( <
+            div >
+            <
+            div >
+            Username: {
+                " "
+            } <
+            input type = "text"
+            value = {
+                username
+            }
+            onChange = {
+                this.changeUsername
+            }
+            /> <
+            button onClick = {
+                this.setUsername
+            } > Set Username < /button> < /
+            div > <
+            video ref = {
+                this.localVideoRef
+            }
+            autoPlay muted style = {
+                {
+                    width: "240px",
+                    height: "180px"
+                }
+            }
+            /> <
+            video ref = {
+                this.remoteVideoRef
+            }
+            autoPlay muted style = {
+                {
+                    width: "240px",
+                    height: "180px"
+                }
+            }
+            /> <
+            div >
+            <
+            button onClick = {
+                this.initMedia
+            }
+            disabled = {
+                startDisabled
+            } >
+            Init Media <
+            /button>
 
-                    <button onClick={this.hangUp} disabled={hangUpDisabled}>
-                        Hang Up
-                    </button>
-                </div>
-                <div>
-                    <ul>
-                        {userList.map(user => (
-                            <li key={user}>
-                                {user}{" "}
-                                {user !== username ? (
-                                    <button
-                                        onClick={() => this.call(user)}
-                                        disabled={callDisabled}
-                                    >
-                                        Call
-                                    </button>
-                                ) : null}
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            </div>
+            <
+            button onClick = {
+                this.hangUp
+            }
+            disabled = {
+                hangUpDisabled
+            } >
+            Hang Up <
+            /button> < /
+            div > <
+            div >
+            <
+            ul > {
+                userList.map(user => ( <
+                    li key = {
+                        user
+                    } > {
+                        user
+                    } {
+                        " "
+                    } {
+                        user !== username ? ( <
+                            button onClick = {
+                                () => this.call(user)
+                            }
+                            disabled = {
+                                callDisabled
+                            } >
+                            Call <
+                            /button>
+                        ) : null
+                    } <
+                    /li>
+                ))
+            } <
+            /ul> < /
+            div > <
+            /div>
         );
     }
 }
