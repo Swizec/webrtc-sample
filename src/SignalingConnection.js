@@ -1,5 +1,6 @@
 class SignalingConnection {
     connection = null;
+    messageListeners = []
 
     constructor({
         socketURL,
@@ -8,7 +9,7 @@ class SignalingConnection {
     }) {
         this.socketURL = socketURL;
         this.onOpen = onOpen;
-        this.onMessage = onMessage;
+        this.messageListeners = [onMessage]
         this.connectToSocket();
     }
 
@@ -31,9 +32,16 @@ class SignalingConnection {
             console.log("Message received: ");
             console.dir(msg);
 
-            this.onMessage(msg)
+            this.messageListeners.forEach(func => func(msg))
         }
     };
+
+    addMsgListener = func => {
+        this.messageListeners = [...this.messageListeners, func]
+        return () => {
+            this.messageListeners = this.messageListeners.filter(f => f !== func)
+        }
+    }
 };
 
 

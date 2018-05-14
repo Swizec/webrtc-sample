@@ -2,6 +2,7 @@ import React from "react";
 import "webrtc-adapter";
 import faker from "faker";
 import SignalingConnection from "./SignalingConnection";
+import PeerConnection from "./PeerConnection";
 
 class WebRTCPeerConnectionWithServer extends React.Component {
     state = {
@@ -78,67 +79,10 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             // // call.
 
             case "video-offer": // Invitation and offer to chat
-                this.handleVideoOfferMsg(msg);
+                this.createPeerConnection();
+                this.peerConnection.videoOffer(msg);
                 break;
-
-            case "video-answer": // Callee has answered our offer
-                this.handleVideoAnswerMsg(msg);
-                break;
-
-            case "new-ice-candidate": // A new ICE candidate has been received
-                this.handleNewICECandidateMsg(msg);
-                break;
-
-            case "hang-up": // The other peer has hung up the call
-                this.handleHangUpMsg(msg);
-                break;
-
-            // Unknown message; output to console for debugging.
-
-            default:
-                console.error("Unknown message received:");
-                console.error(msg);
         }
-    };
-
-    handleVideoOfferMsg = msg => {
-        this.createPeerConnection();
-        this.peerConnection.addStream(this.state.localStream);
-
-        this.peerConnection
-            .setRemoteDescription(new RTCSessionDescription(msg.sdp))
-            .then(() => this.peerConnection.createAnswer())
-            .then(answer => {
-                console.log("setting local answer", answer);
-                return this.peerConnection.setLocalDescription(answer);
-            })
-            .then(() => {
-                this.signalingConnection.sendToServer({
-                    name: this.state.username,
-                    targetUsername: this.state.targetUsername,
-                    type: "video-answer",
-                    sdp: this.peerConnection.localDescription
-                });
-            })
-            .catch(console.error);
-    };
-
-    handleVideoAnswerMsg = msg => {
-        console.log("handleVideoAnswerMsg", msg);
-
-        this.peerConnection
-            .setRemoteDescription(new RTCSessionDescription(msg.sdp))
-            .catch(console.error);
-    };
-
-    handleNewICECandidateMsg = msg => {
-        this.peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-    };
-
-    handleHangUpMsg = msg => {
-        console.log("handleHangUpMsg", msg);
-
-        this.closeVideoCall();
     };
 
     gotStream = stream => {
@@ -149,7 +93,6 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         });
     };
     gotRemoteTrack = event => {
-        console.log("got remote track", event);
         let remoteVideo = this.remoteVideoRef.current;
 
         if (remoteVideo.srcObject !== event.streams[0]) {
@@ -161,7 +104,6 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         });
     };
     gotRemoteStream = event => {
-        console.log("got remote stream", event);
         this.remoteVideoRef.current.srcObject = event.stream;
         this.setState({
             hangUpDisabled: false
@@ -186,7 +128,6 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             targetUsername: user
         });
         this.createPeerConnection();
-        this.peerConnection.addStream(this.state.localStream);
     };
 
     hangUp = () => {
@@ -195,82 +136,29 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             target: this.state.targetUsername,
             type: "hang-up"
         });
-        this.closeVideoCall();
+        this.peerConnection.close();
     };
 
     createPeerConnection = () => {
         if (this.peerConnection) return;
 
-        this.peerConnection = new RTCPeerConnection({
-            iceServers: [
-                {
-                    urls: `turn:${window.location.hostname}`,
-                    username: "webrtc",
-                    credential: "turnserver"
-                }
-            ]
+        this.peerConnection = new PeerConnection({
+            gotRemoteStream: this.gotRemoteStream,
+            gotRemoteTrack: this.gotRemoteTrack,
+            signalingConnection: this.signalingConnection,
+            onClose: this.closeVideoCall,
+            localStream: this.state.localStream,
+            username: this.state.username,
+            targetUsername: this.state.targetUsername
         });
-        this.peerConnection.onicecandidate = this.handleICECandidateEvent;
-        this.peerConnection.oniceconnectionstatechange = this.handleICEConnectionStateChangeEvent;
-        // peerConnection.onicegatheringstatechange = this.handleICEGatheringStateChangeEvent;
-        this.peerConnection.onsignalingstatechange = this.handleSignalingStateChangeEvent;
-        this.peerConnection.onnegotiationneeded = this.handleNegotiationNeededEvent;
-        this.peerConnection.onaddtrack = this.gotRemoteTrack;
-        this.peerConnection.onaddstream = this.gotRemoteStream;
-
-        console.log("peerconnection created", this.peerConnection);
-    };
-
-    handleICECandidateEvent = event => {
-        if (event.candidate) {
-            this.signalingConnection.sendToServer({
-                type: "new-ice-candidate",
-                target: this.state.targetUsername,
-                candidate: event.candidate
-            });
-        }
-    };
-
-    handleICEConnectionStateChangeEvent = event => {
-        switch (this.peerConnection.iceConnectionState) {
-            case "closed":
-            case "failed":
-            case "disconnected":
-                this.closeVideoCall();
-        }
-    };
-
-    handleSignalingStateChangeEvent = event => {
-        switch (this.peerConnection.signalingState) {
-            case "closed":
-                this.closeVideoCall();
-        }
-    };
-
-    handleNegotiationNeededEvent = () => {
-        const { username, targetUsername } = this;
-        this.peerConnection
-            .createOffer()
-            .then(offer => this.peerConnection.setLocalDescription(offer))
-            .then(() =>
-                this.signalingConnection.sendToServer({
-                    name: username,
-                    target: targetUsername,
-                    type: "video-offer",
-                    sdp: this.peerConnection.localDescription
-                })
-            )
-            .catch(console.error);
     };
 
     closeVideoCall = () => {
-        console.log("CLOSING VIDEO CALL");
-        this.remoteVideoRef.current.srcObject
-            .getTracks()
-            .forEach(track => track.stop());
+        this.remoteVideoRef.current.srcObject &&
+            this.remoteVideoRef.current.srcObject
+                .getTracks()
+                .forEach(track => track.stop());
         this.remoteVideoRef.current.src = null;
-        this.peerConnection.close();
-        this.peerConnection = null;
 
         this.setState({
             targetUsername: null,
