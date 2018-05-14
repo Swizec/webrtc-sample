@@ -149,7 +149,7 @@ var httpsOptions = {
 
 var httpsServer = https.createServer(httpsOptions, function (request, response) {
     log("Received secure request for " + request.url);
-    response.writeHead(404);
+    response.write("Hello world");
     response.end();
 });
 

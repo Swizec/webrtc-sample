@@ -1,6 +1,7 @@
 import React from "react";
 import "webrtc-adapter";
 import faker from "faker";
+import SignalingConnection from "./SignalingConnection";
 
 class WebRTCPeerConnectionWithServer extends React.Component {
     state = {
@@ -10,7 +11,6 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         pc1: null,
         pc2: null,
         localStream: null,
-        signalingConnection: null,
         clientID: new Date().getTime() % 1000,
         username: faker.internet.userName(),
         userList: []
@@ -19,20 +19,11 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     localVideoRef = React.createRef();
     remoteVideoRef = React.createRef();
     peerConnection = null;
-
-    sendToServer = msg => {
-        const msgJSON = JSON.stringify(msg);
-
-        console.log("Sending", msg.type, msgJSON);
-        this.state.signalingConnection.send(msgJSON);
-    };
+    signalingConnection = null;
 
     setUsername = () => {
-        const {
-            username,
-            clientID
-        } = this.state;
-        this.sendToServer({
+        const { username, clientID } = this.state;
+        this.signalingConnection.sendToServer({
             name: username,
             date: Date.now(),
             id: clientID,
@@ -46,93 +37,68 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         });
 
     componentDidMount() {
-        this.connectToSocket({
-            socketURL: 'localhost:6503'
+        this.signalingConnection = new SignalingConnection({
+            socketURL: "localhost:6503",
+            onOpen: () =>
+                this.setState({
+                    startDisabled: false
+                }),
+            onMessage: this.onSignalingMessage
         });
     }
 
-    connectToSocket = ({
-        socketURL
-    }) => {
-        let serverUrl = `wss://${socketURL}`;
+    onSignalingMessage = msg => {
+        switch (msg.type) {
+            case "id":
+                this.setState({
+                    clientID: msg.id
+                });
+                this.setUsername();
+                break;
 
-        let signalingConnection = new WebSocket(serverUrl, "json");
-        signalingConnection.onopen = () =>
-            this.setState({
-                startDisabled: false
-            });
+            case "rejectusername":
+                this.setState({
+                    username: msg.name
+                });
+                console.log(
+                    `Your username has been set to <${
+                        msg.name
+                    }> because the name you chose is in use`
+                );
+                break;
 
-        signalingConnection.onmessage = event => {
-            let msg = JSON.parse(event.data);
-            console.log("Message received: ");
-            console.dir(msg);
-            const time = new Date(msg.date),
-                timeStr = time.toLocaleTimeString();
+            case "userlist": // Received an updated user list
+                this.setState({
+                    userList: msg.users
+                });
+                break;
 
-            switch (msg.type) {
-                case "id":
-                    this.setState({
-                        clientID: msg.id
-                    });
-                    this.setUsername();
-                    break;
+            // // Signaling messages: these messages are used to trade WebRTC
+            // // signaling information during negotiations leading up to a video
+            // // call.
 
-                case "username":
-                    console.log(`${msg.name} signed in at ${timeStr}`);
-                    break;
+            case "video-offer": // Invitation and offer to chat
+                this.handleVideoOfferMsg(msg);
+                break;
 
-                case "message":
-                    console.log(`${timeStr}:: ${msg.name} -> ${msg.text}`);
-                    break;
+            case "video-answer": // Callee has answered our offer
+                this.handleVideoAnswerMsg(msg);
+                break;
 
-                case "rejectusername":
-                    this.setState({
-                        username: msg.name
-                    });
-                    console.log(
-                        `Your username has been set to <${
-                            msg.name
-                        }> because the name you chose is in use`
-                    );
-                    break;
+            case "new-ice-candidate": // A new ICE candidate has been received
+                this.handleNewICECandidateMsg(msg);
+                break;
 
-                case "userlist": // Received an updated user list
-                    this.setState({
-                        userList: msg.users
-                    });
-                    break;
+            case "hang-up": // The other peer has hung up the call
+                this.handleHangUpMsg(msg);
+                break;
 
-                    // // Signaling messages: these messages are used to trade WebRTC
-                    // // signaling information during negotiations leading up to a video
-                    // // call.
+            // Unknown message; output to console for debugging.
 
-                case "video-offer": // Invitation and offer to chat
-                    this.handleVideoOfferMsg(msg);
-                    break;
-
-                case "video-answer": // Callee has answered our offer
-                    this.handleVideoAnswerMsg(msg);
-                    break;
-
-                case "new-ice-candidate": // A new ICE candidate has been received
-                    this.handleNewICECandidateMsg(msg);
-                    break;
-
-                case "hang-up": // The other peer has hung up the call
-                    this.handleHangUpMsg(msg);
-                    break;
-
-                    // Unknown message; output to console for debugging.
-
-                default:
-                    console.error("Unknown message received:");
-                    console.error(msg);
-            }
-        };
-
-        this.setState({
-            signalingConnection
-        });
+            default:
+                console.error("Unknown message received:");
+                console.error(msg);
+        }
     };
 
     handleVideoOfferMsg = msg => {
@@ -147,7 +113,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                 return this.peerConnection.setLocalDescription(answer);
             })
             .then(() => {
-                this.sendToServer({
+                this.signalingConnection.sendToServer({
                     name: this.state.username,
                     targetUsername: this.state.targetUsername,
                     type: "video-answer",
@@ -224,7 +190,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     };
 
     hangUp = () => {
-        this.sendToServer({
+        this.signalingConnection.sendToServer({
             name: this.state.username,
             target: this.state.targetUsername,
             type: "hang-up"
@@ -236,11 +202,13 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         if (this.peerConnection) return;
 
         this.peerConnection = new RTCPeerConnection({
-            iceServers: [{
-                urls: `turn:${window.location.hostname}`,
-                username: "webrtc",
-                credential: "turnserver"
-            }]
+            iceServers: [
+                {
+                    urls: `turn:${window.location.hostname}`,
+                    username: "webrtc",
+                    credential: "turnserver"
+                }
+            ]
         });
         this.peerConnection.onicecandidate = this.handleICECandidateEvent;
         this.peerConnection.oniceconnectionstatechange = this.handleICEConnectionStateChangeEvent;
@@ -255,7 +223,7 @@ class WebRTCPeerConnectionWithServer extends React.Component {
 
     handleICECandidateEvent = event => {
         if (event.candidate) {
-            this.sendToServer({
+            this.signalingConnection.sendToServer({
                 type: "new-ice-candidate",
                 target: this.state.targetUsername,
                 candidate: event.candidate
@@ -280,15 +248,12 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     };
 
     handleNegotiationNeededEvent = () => {
-        const {
-            username,
-            targetUsername
-        } = this;
+        const { username, targetUsername } = this;
         this.peerConnection
             .createOffer()
             .then(offer => this.peerConnection.setLocalDescription(offer))
             .then(() =>
-                this.sendToServer({
+                this.signalingConnection.sendToServer({
                     name: username,
                     target: targetUsername,
                     type: "video-offer",
@@ -322,94 +287,62 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             userList
         } = this.state;
 
-        return ( <
-            div >
-            <
-            div >
-            Username: {
-                " "
-            } <
-            input type = "text"
-            value = {
-                username
-            }
-            onChange = {
-                this.changeUsername
-            }
-            /> <
-            button onClick = {
-                this.setUsername
-            } > Set Username < /button> < /
-            div > <
-            video ref = {
-                this.localVideoRef
-            }
-            autoPlay muted style = {
-                {
-                    width: "240px",
-                    height: "180px"
-                }
-            }
-            /> <
-            video ref = {
-                this.remoteVideoRef
-            }
-            autoPlay muted style = {
-                {
-                    width: "240px",
-                    height: "180px"
-                }
-            }
-            /> <
-            div >
-            <
-            button onClick = {
-                this.initMedia
-            }
-            disabled = {
-                startDisabled
-            } >
-            Init Media <
-            /button>
-
-            <
-            button onClick = {
-                this.hangUp
-            }
-            disabled = {
-                hangUpDisabled
-            } >
-            Hang Up <
-            /button> < /
-            div > <
-            div >
-            <
-            ul > {
-                userList.map(user => ( <
-                    li key = {
-                        user
-                    } > {
-                        user
-                    } {
-                        " "
-                    } {
-                        user !== username ? ( <
-                            button onClick = {
-                                () => this.call(user)
-                            }
-                            disabled = {
-                                callDisabled
-                            } >
-                            Call <
-                            /button>
-                        ) : null
-                    } <
-                    /li>
-                ))
-            } <
-            /ul> < /
-            div > <
-            /div>
+        return (
+            <div>
+                <div>
+                    Username:{" "}
+                    <input
+                        type="text"
+                        value={username}
+                        onChange={this.changeUsername}
+                    />
+                    <button onClick={this.setUsername}> Set Username </button>
+                </div>
+                <video
+                    ref={this.localVideoRef}
+                    autoPlay
+                    muted
+                    style={{
+                        width: "240px",
+                        height: "180px"
+                    }}
+                />
+                <video
+                    ref={this.remoteVideoRef}
+                    autoPlay
+                    muted
+                    style={{
+                        width: "240px",
+                        height: "180px"
+                    }}
+                />
+                <div>
+                    <button onClick={this.initMedia} disabled={startDisabled}>
+                        Init Media
+                    </button>
+                    <button onClick={this.hangUp} disabled={hangUpDisabled}>
+                        Hang Up
+                    </button>
+                </div>
+                <div>
+                    <ul>
+                        {userList.map(user => (
+                            <li key={user}>
+                                {user}
+                                {"  "}
+                                {user !== username ? (
+                                    <button
+                                        onClick={() => this.call(user)}
+                                        disabled={callDisabled}
+                                    >
+                                        Call
+                                    </button>
+                                ) : null}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            </div>
         );
     }
 }

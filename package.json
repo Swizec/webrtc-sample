@@ -16,7 +16,7 @@
   },
   "scripts": {
     "start-dev": "react-scripts start",
-    "start": "node signaling-server.js",
+    "start": "node signaling-server",
     "build": "react-scripts build",
     "test": "react-scripts test --env=jsdom",
     "eject": "react-scripts eject",
