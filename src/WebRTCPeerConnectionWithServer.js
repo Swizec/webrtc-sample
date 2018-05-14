@@ -39,7 +39,8 @@ class WebRTCPeerConnectionWithServer extends React.Component {
 
     componentDidMount() {
         this.signalingConnection = new SignalingConnection({
-            socketURL: "localhost:6503",
+            // socketURL: "localhost:6503",
+            socketURL: "webrtc-sample-cedgiiiply.now.sh",
             onOpen: () =>
                 this.setState({
                     startDisabled: false

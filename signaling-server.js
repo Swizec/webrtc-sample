@@ -26,7 +26,7 @@
 
 "use strict";
 
-//var http = require('http');
+var http = require('http');
 var https = require('https');
 var url = require('url');
 var fs = require('fs');
@@ -137,17 +137,23 @@ function sendUserListToAll() {
 // Load the key and certificate data to be used for our HTTPS/WSS
 // server.
 
-var httpsOptions = {
-    key: fs.readFileSync("./ssl/host.key"),
-    cert: fs.readFileSync("./ssl/host.cert")
-};
+// var httpsOptions = {
+//     key: fs.readFileSync("./ssl/host.key"),
+//     cert: fs.readFileSync("./ssl/host.cert")
+// };
 
 // Our HTTPS server does nothing but service WebSocket
 // connections, so every request just returns 404. Real Web
 // requests are handled by the main server on the box. If you
 // want to, you can return real HTML here and serve Web content.
 
-var httpsServer = https.createServer(httpsOptions, function (request, response) {
+// var httpsServer = https.createServer(httpsOptions, function (request, response) {
+//     log("Received secure request for " + request.url);
+//     response.write("Hello world");
+//     response.end();
+// });
+
+var httpsServer = http.createServer(function (request, response) {
     log("Received secure request for " + request.url);
     response.write("Hello world");
     response.end();
