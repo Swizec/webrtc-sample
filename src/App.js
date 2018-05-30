@@ -1,7 +1,8 @@
 import React, { Component } from "react";
 import logo from "./logo.svg";
 import "./App.css";
-import WebRTCPeerConnectionWithServer from "./WebRTCPeerConnectionWithServer";
+// import WebRTCPeerConnectionWithServer from "./WebRTCPeerConnectionWithServer";
+import WebRTCDataChannel from "./WebRTCDataChannel";
 
 class App extends Component {
     render() {
@@ -12,7 +13,8 @@ class App extends Component {
                     <h1 className="App-title"> Welcome to React </h1>{" "}
                 </header>{" "}
                 {/* <WebRTCPeerConnection /> */}
-                <WebRTCPeerConnectionWithServer />
+                {/* <WebRTCPeerConnectionWithServer /> */}
+                <WebRTCDataChannel />
             </div>
         );
     }

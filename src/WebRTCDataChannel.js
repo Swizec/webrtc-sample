@@ -1,10 +1,10 @@
 import React from "react";
-import "webrtc-adapter";
+// import "webrtc-adapter";
 import faker from "faker";
 import SignalingConnection from "./SignalingConnection";
 import PeerConnection from "./PeerConnection";
 
-class WebRTCPeerConnectionWithServer extends React.Component {
+class WebRTCDataChannel extends React.Component {
     state = {
         startDisabled: true,
         callDisabled: true,
@@ -15,8 +15,6 @@ class WebRTCPeerConnectionWithServer extends React.Component {
         userList: []
     };
 
-    localVideoRef = React.createRef();
-    remoteVideoRef = React.createRef();
     peerConnection = null;
     signalingConnection = null;
 
@@ -41,7 +39,8 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             socketURL: "webrtc-sample-signaling.now.sh",
             onOpen: () =>
                 this.setState({
-                    startDisabled: false
+                    startDisabled: false,
+                    callDisabled: false
                 }),
             onMessage: this.onSignalingMessage
         });
@@ -77,90 +76,48 @@ class WebRTCPeerConnectionWithServer extends React.Component {
             // // signaling information during negotiations leading up to a video
             // // call.
 
-            case "video-offer": // Invitation and offer to chat
-                this.createPeerConnection();
-                this.peerConnection.videoOffer(msg);
+            case "connection-offer": // Invitation and offer to chat
+                if (msg.target === this.state.username) {
+                    this.createPeerConnection(msg.name);
+                    console.log(
+                        "Calling connectionOffer from WebRTCDataChannel.onSignalingMessage",
+                        JSON.stringify(msg)
+                    );
+                    this.peerConnection.connectionOffer(msg);
+                }
                 break;
         }
     };
 
-    gotStream = stream => {
-        this.localVideoRef.current.srcObject = stream;
-        this.setState({
-            callDisabled: false,
-            localStream: stream
-        });
-    };
-    gotRemoteTrack = event => {
-        let remoteVideo = this.remoteVideoRef.current;
-
-        if (remoteVideo.srcObject !== event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
-        }
-
-        this.setState({
-            hangUpDisabled: false
-        });
-    };
-    gotRemoteStream = event => {
-        this.remoteVideoRef.current.srcObject = event.stream;
-        this.setState({
-            hangUpDisabled: false
-        });
-    };
-
-    initMedia = () => {
-        this.setState({
-            startDisabled: true
-        });
-        navigator.mediaDevices
-            .getUserMedia({
-                audio: true,
-                video: true
-            })
-            .then(this.gotStream)
-            .catch(e => alert("getUserMedia() error:" + e.name));
-    };
-
     call = user => {
-        this.setState({
-            targetUsername: user
-        });
-        this.createPeerConnection();
+        this.createPeerConnection(user);
+        this.peerConnection.offerConnection();
     };
 
-    hangUp = () => {
-        this.signalingConnection.sendToServer({
-            name: this.state.username,
-            target: this.state.targetUsername,
-            type: "hang-up"
-        });
-        this.peerConnection.close();
-    };
-
-    createPeerConnection = () => {
+    createPeerConnection = targetUsername => {
         if (this.peerConnection) return;
 
+        console.log("creating peer connection");
+
         this.peerConnection = new PeerConnection({
-            gotRemoteStream: this.gotRemoteStream,
-            gotRemoteTrack: this.gotRemoteTrack,
             signalingConnection: this.signalingConnection,
-            onClose: this.closeVideoCall,
-            localStream: this.state.localStream,
+            onClose: this.closeConnection,
             username: this.state.username,
-            targetUsername: this.state.targetUsername
+            targetUsername,
+            dataChannelLabel: "myDataChannel"
         });
     };
 
-    closeVideoCall = () => {
-        this.remoteVideoRef.current.srcObject &&
-            this.remoteVideoRef.current.srcObject
-                .getTracks()
-                .forEach(track => track.stop());
-        this.remoteVideoRef.current.src = null;
+    sendData = () => {
+        try {
+            this.peerConnection.dataChannel.send("Hello they're");
+        } catch (e) {
+            console.log("Error sending");
+        }
+    };
 
+    closeConnection = () => {
         this.setState({
-            targetUsername: null,
             callDisabled: false
         });
     };
@@ -185,28 +142,9 @@ class WebRTCPeerConnectionWithServer extends React.Component {
                     />
                     <button onClick={this.setUsername}> Set Username </button>
                 </div>
-                <video
-                    ref={this.localVideoRef}
-                    autoPlay
-                    muted
-                    style={{
-                        width: "240px",
-                        height: "180px"
-                    }}
-                />
-                <video
-                    ref={this.remoteVideoRef}
-                    autoPlay
-                    muted
-                    style={{
-                        width: "240px",
-                        height: "180px"
-                    }}
-                />
+
                 <div>
-                    <button onClick={this.initMedia} disabled={startDisabled}>
-                        Init Media
-                    </button>
+                    <button onClick={this.sendData}>Send Data</button>
                     <button onClick={this.hangUp} disabled={hangUpDisabled}>
                         Hang Up
                     </button>
@@ -234,4 +172,4 @@ class WebRTCPeerConnectionWithServer extends React.Component {
     }
 }
 
-export default WebRTCPeerConnectionWithServer;
+export default WebRTCDataChannel;
